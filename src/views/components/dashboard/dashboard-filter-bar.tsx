@@ -1,15 +1,14 @@
-import type { ChangeEvent } from "react"
-
-import type { DashboardFiltersState, DashboardOption } from "@/app/config/dashboard"
-import { Button } from "@/views/components/ui/button"
-import { Input } from "@/views/components/ui/input"
+// src/views/components/dashboard/dashboard-filter-bar.tsx
+import type { DashboardFiltersState, DashboardOption } from '@/app/config/dashboard'
+import { Button } from '@/views/components/ui/button'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/views/components/ui/select"
+} from '@/views/components/ui/select'
+import { DateRangePicker } from '@/views/components/dashboard/date-range-picker'
 
 type DashboardFilterBarProps = {
   filters: DashboardFiltersState
@@ -17,7 +16,7 @@ type DashboardFilterBarProps = {
   vehicles: DashboardOption[]
   onPeriodChange: (value: string) => void
   onVehicleChange: (value: string) => void
-  onDateChange: (field: "dateFrom" | "dateTo", value: string) => void
+  onDateChange: (field: 'dateFrom' | 'dateTo', value: string) => void
   onGenerateReport: () => void
 }
 
@@ -30,11 +29,6 @@ export function DashboardFilterBar({
   onDateChange,
   onGenerateReport,
 }: DashboardFilterBarProps) {
-  const handleDateChange =
-    (field: "dateFrom" | "dateTo") => (event: ChangeEvent<HTMLInputElement>) => {
-      onDateChange(field, event.target.value)
-    }
-
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
       <Button
@@ -77,20 +71,11 @@ export function DashboardFilterBar({
         </SelectContent>
       </Select>
 
-      <div className="grid h-9 grid-cols-2 gap-2 rounded-lg border border-gray-200 bg-white p-1 sm:min-w-[248px]">
-        <Input
-          type="date"
-          value={filters.dateFrom}
-          onChange={handleDateChange("dateFrom")}
-          className="h-7 border-0 px-2 text-xs text-slate-500 shadow-none focus-visible:ring-0"
-        />
-        <Input
-          type="date"
-          value={filters.dateTo}
-          onChange={handleDateChange("dateTo")}
-          className="h-7 border-0 px-2 text-xs text-slate-500 shadow-none focus-visible:ring-0"
-        />
-      </div>
+      <DateRangePicker
+        dateFrom={filters.dateFrom}
+        dateTo={filters.dateTo}
+        onChange={onDateChange}
+      />
     </div>
   )
 }
