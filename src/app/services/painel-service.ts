@@ -34,3 +34,4 @@ export const getStatus = async (veiculoId?: number) => {
   });
   return data;
 };
+
