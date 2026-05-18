@@ -35,3 +35,9 @@ export const getStatus = async (veiculoId?: number) => {
   return data;
 };
 
+export const getPostos = async (veiculoId?: number, period?: string, dataInicio?: string, dataFim?: string) => {
+  const { data } = await api.get("/painel/postos", {
+    params: { veiculoId, period, dataInicio, dataFim },
+  });
+  return data;
+};

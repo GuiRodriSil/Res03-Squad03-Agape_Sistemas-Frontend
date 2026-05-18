@@ -1,4 +1,3 @@
-// src/views/pages/Dashboard.tsx
 import { useEffect, useState } from 'react'
 import { Bar, Line, Pie } from 'react-chartjs-2'
 
@@ -19,7 +18,7 @@ import {
   getResumo,
   getStatus,
   getVeiculos,
-} from '@/app/services/painel-mock-service'
+} from '@/app/services/painel-service'
 import { DashboardFilterBar } from '@/views/components/dashboard/dashboard-filter-bar'
 import { DashboardMetricCard } from '@/views/components/dashboard/dashboard-metric-card'
 import { DashboardShellCard } from '@/views/components/dashboard/dashboard-shell-card'
@@ -32,24 +31,20 @@ const palette = {
 
 export default function Dashboard() {
   const [filters, setFilters] = useState<DashboardFiltersState>(initialDashboardFilters)
-
   const [vehicleOptions, setVehicleOptions] = useState([{ value: 'all', label: 'Todos os veículos' }])
-
-  const [resumo, setResumo] = useState({ custoMedioPorKm: 0, quilometragemTotal: 0, viagensRealizadas: 0 })
+  const [resumo, setResumo] = useState({ custoMedioPorKm: 0, kmTotal: 0, viagensRealizadas: 0 })
   const [consumo, setConsumo] = useState<{ labels: string[]; data: number[] }>({ labels: [], data: [] })
   const [postos, setPostos] = useState<{ labels: string[]; data: number[] }>({ labels: [], data: [] })
   const [km, setKm] = useState<{ labels: string[]; empresa: number[]; terceirizado: number[] }>({ labels: [], empresa: [], terceirizado: [] })
-  const [status, setStatus] = useState({ operando: 0, manutencao: 0, parados: 0 })
+  const [status, setStatus] = useState({ operando: 0, manutencao: 0, parados: 0, percentualDisponibilidade: 0 })
   const [loading, setLoading] = useState(true)
-
-  // Chave que muda a cada fetch — força re-mount dos gráficos Chart.js
   const [chartKey, setChartKey] = useState(0)
 
   useEffect(() => {
     getVeiculos().then((veiculos) => {
       setVehicleOptions([
         { value: 'all', label: 'Todos os veículos' },
-        ...veiculos.map((v) => ({ value: String(v.id), label: `${v.placa} — ${v.modelo}` })),
+        ...veiculos.map((v: any) => ({ value: String(v.id), label: v.nome })),
       ])
     })
   }, [])
@@ -69,21 +64,20 @@ export default function Dashboard() {
     ]).then(([resumoData, consumoData, postosData, kmData, statusData]) => {
       setResumo(resumoData)
       setConsumo({
-        labels: consumoData.map((c) => c.mes),
-        data: consumoData.map((c) => c.custoTotal),
+        labels: consumoData.map((c: any) => c.mes),
+        data: consumoData.map((c: any) => c.valorConsumo),
       })
       setPostos({
-        labels: postosData.map((p) => p.nome),
-        data: postosData.map((p) => p.precoMedio),
+        labels: postosData.map((p: any) => p.nomePosto),
+        data: postosData.map((p: any) => p.precoMedio),
       })
       setKm({
-        labels: kmData.map((k) => k.mes),
-        empresa: kmData.map((k) => k.kmEmpresa),
-        terceirizado: kmData.map((k) => k.kmTerceirizado),
+        labels: kmData.map((k: any) => k.mes),
+        empresa: kmData.map((k: any) => k.kmEmpresa),
+        terceirizado: kmData.map((k: any) => k.kmTerceirizados),
       })
       setStatus(statusData)
       setLoading(false)
-      // Incrementa a key para forçar re-mount dos gráficos com os novos dados
       setChartKey((k) => k + 1)
     })
   }, [filters.vehicle, filters.period, filters.dateFrom, filters.dateTo])
@@ -95,7 +89,7 @@ export default function Dashboard() {
     },
     {
       label: staticMetrics[1].label,
-      value: loading ? '...' : `${resumo.quilometragemTotal.toLocaleString('pt-BR')} KM`,
+      value: loading ? '...' : `${resumo.kmTotal.toLocaleString('pt-BR')} KM`,
     },
     {
       label: staticMetrics[2].label,
@@ -254,7 +248,9 @@ export default function Dashboard() {
               </div>
               <div className="mt-3 space-y-1">
                 <p className="text-sm font-medium text-slate-700">
-                  {status.operando > 0
+                  {status.percentualDisponibilidade !== undefined
+                    ? `Frota operando com ${Math.round(status.percentualDisponibilidade)}% de disponibilidade`
+                    : status.operando > 0
                     ? `Frota operando com ${Math.round((status.operando / (status.operando + status.manutencao + status.parados)) * 100)}% de disponibilidade`
                     : 'Sem dados de frota'}
                 </p>
