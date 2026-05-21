@@ -14,15 +14,21 @@ import {
 } from '@/app/config/dashboard'
 import {
   getConsumo,
-  getPostos,
   getQuilometragem,
   getResumo,
   getStatus,
   getVeiculos,
-} from '@/app/services/painel-mock-service'
+  getRelatorios, // Importando a função atualizada do seu painel-service
+} from '@/app/services/painel-service'
 import { DashboardFilterBar } from '@/views/components/dashboard/dashboard-filter-bar'
 import { DashboardMetricCard } from '@/views/components/dashboard/dashboard-metric-card'
 import { DashboardShellCard } from '@/views/components/dashboard/dashboard-shell-card'
+
+interface VeiculoFiltroDTO { id: number; nome: string }
+interface ConsumoMensalDTO { mes: string; valorConsumo: number }
+interface QuilometragemDTO { mes: string; kmEmpresa: number; kmTerceirizados: number }
+interface StatusFrotaDTO { operando: number; manutencao: number; parados: number; percentualDisponibilidade: number }
+interface ResumoPainelDTO { custoMedioPorKm: number; kmTotal: number; viagensRealizadas: number }
 
 const palette = {
   primary: '#1e293b',
@@ -35,21 +41,20 @@ export default function Dashboard() {
 
   const [vehicleOptions, setVehicleOptions] = useState([{ value: 'all', label: 'Todos os veículos' }])
 
-  const [resumo, setResumo] = useState({ custoMedioPorKm: 0, quilometragemTotal: 0, viagensRealizadas: 0 })
+  const [resumo, setResumo] = useState<ResumoPainelDTO>({ custoMedioPorKm: 0, kmTotal: 0, viagensRealizadas: 0 })
   const [consumo, setConsumo] = useState<{ labels: string[]; data: number[] }>({ labels: [], data: [] })
   const [postos, setPostos] = useState<{ labels: string[]; data: number[] }>({ labels: [], data: [] })
   const [km, setKm] = useState<{ labels: string[]; empresa: number[]; terceirizado: number[] }>({ labels: [], empresa: [], terceirizado: [] })
-  const [status, setStatus] = useState({ operando: 0, manutencao: 0, parados: 0 })
+  const [status, setStatus] = useState<StatusFrotaDTO>({ operando: 0, manutencao: 0, parados: 0, percentualDisponibilidade: 0 })
   const [loading, setLoading] = useState(true)
 
-  // Chave que muda a cada fetch — força re-mount dos gráficos Chart.js
   const [chartKey, setChartKey] = useState(0)
 
   useEffect(() => {
-    getVeiculos().then((veiculos) => {
+    getVeiculos().then((veiculos: VeiculoFiltroDTO[]) => {
       setVehicleOptions([
         { value: 'all', label: 'Todos os veículos' },
-        ...veiculos.map((v) => ({ value: String(v.id), label: `${v.placa} — ${v.modelo}` })),
+        ...veiculos.map((v) => ({ value: String(v.id), label: v.nome })),
       ])
     })
   }, [])
@@ -58,32 +63,32 @@ export default function Dashboard() {
     setLoading(true)
 
     const veiculoId = filters.vehicle === 'all' ? undefined : Number(filters.vehicle)
-    const { period, dateFrom, dateTo } = filters
+    const { dateFrom, dateTo } = filters
 
     Promise.all([
-      getResumo({ veiculoId, period, dataInicio: dateFrom, dataFim: dateTo }),
-      getConsumo(veiculoId, period, dateFrom, dateTo),
-      getPostos(veiculoId, period, dateFrom, dateTo),
-      getQuilometragem(veiculoId, period, dateFrom, dateTo),
+      getResumo({ veiculoId, dataInicio: dateFrom || undefined, dataFim: dateTo || undefined }),
+      getConsumo(veiculoId),
+      getQuilometragem(veiculoId),
       getStatus(veiculoId),
-    ]).then(([resumoData, consumoData, postosData, kmData, statusData]) => {
+    ]).then(([resumoData, consumoData, kmData, statusData]: [
+      ResumoPainelDTO,
+      ConsumoMensalDTO[],
+      QuilometragemDTO[],
+      StatusFrotaDTO,
+    ]) => {
       setResumo(resumoData)
       setConsumo({
         labels: consumoData.map((c) => c.mes),
-        data: consumoData.map((c) => c.custoTotal),
+        data: consumoData.map((c) => c.valorConsumo),
       })
-      setPostos({
-        labels: postosData.map((p) => p.nome),
-        data: postosData.map((p) => p.precoMedio),
-      })
+      setPostos({ labels: [], data: [] }) // endpoint não existe no backend
       setKm({
         labels: kmData.map((k) => k.mes),
         empresa: kmData.map((k) => k.kmEmpresa),
-        terceirizado: kmData.map((k) => k.kmTerceirizado),
+        terceirizado: kmData.map((k) => k.kmTerceirizados),
       })
       setStatus(statusData)
       setLoading(false)
-      // Incrementa a key para forçar re-mount dos gráficos com os novos dados
       setChartKey((k) => k + 1)
     })
   }, [filters.vehicle, filters.period, filters.dateFrom, filters.dateTo])
@@ -95,7 +100,7 @@ export default function Dashboard() {
     },
     {
       label: staticMetrics[1].label,
-      value: loading ? '...' : `${resumo.quilometragemTotal.toLocaleString('pt-BR')} KM`,
+      value: loading ? '...' : `${resumo.kmTotal.toLocaleString('pt-BR')} KM`,
     },
     {
       label: staticMetrics[2].label,
@@ -121,6 +126,31 @@ export default function Dashboard() {
     }
   }
 
+  // FUNÇÃO DE DOWNLOAD DE RELATÓRIO PDF
+  const handleGenerateReport = async () => {
+    try {
+      const blob = await getRelatorios()
+
+      // Converte a resposta binária em uma URL utilizável pelo navegador
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Define o nome do arquivo baixado
+      link.setAttribute('download', `certidao_${new Date().toISOString().slice(0, 10)}.pdf`)
+      
+      document.body.appendChild(link)
+      link.click()
+      
+      // Remove o elemento da tela e limpa a memória cache do blob
+      link.parentNode?.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Erro ao baixar relatório:', error)
+      window.alert('Ocorreu um erro ao gerar a certidão PDF.')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto flex max-w-7xl flex-col space-y-6 p-6">
@@ -137,7 +167,7 @@ export default function Dashboard() {
             onPeriodChange={handlePeriodChange}
             onVehicleChange={(value) => setFilters((c) => ({ ...c, vehicle: value }))}
             onDateChange={handleDateChange}
-            onGenerateReport={() => window.alert('Relatório gerado com a visualização atual.')}
+            onGenerateReport={handleGenerateReport} // Vinculado à função de download
           />
         </header>
 
@@ -255,7 +285,7 @@ export default function Dashboard() {
               <div className="mt-3 space-y-1">
                 <p className="text-sm font-medium text-slate-700">
                   {status.operando > 0
-                    ? `Frota operando com ${Math.round((status.operando / (status.operando + status.manutencao + status.parados)) * 100)}% de disponibilidade`
+                    ? `Frota operando com ${Math.round(status.percentualDisponibilidade)}% de disponibilidade`
                     : 'Sem dados de frota'}
                 </p>
                 <p className="text-xs text-slate-400">Status atual da frota de veículos</p>
