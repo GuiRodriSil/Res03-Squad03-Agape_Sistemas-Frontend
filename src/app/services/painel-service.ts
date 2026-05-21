@@ -35,3 +35,17 @@ export const getStatus = async (veiculoId?: number) => {
   return data;
 };
 
+export const getRelatorios = async (): Promise<Blob> => {
+  const { data } = await api.get("/relatorios/certidao", {
+    responseType: "blob",
+  });
+  return data;
+};
+
+export const getIndicadores = async (params: {
+  dataInicio: string;
+  dataFim: string;
+}) => {
+  const { data } = await api.get("/v1/dashboard/indicadores", { params });
+  return data;
+};
