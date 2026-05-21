@@ -18,7 +18,8 @@ import {
   getResumo,
   getStatus,
   getVeiculos,
-  getRelatorios, // Importando a função atualizada do seu painel-service
+  getRelatorios,
+  getIndicadores,
 } from '@/app/services/painel-service'
 import { DashboardFilterBar } from '@/views/components/dashboard/dashboard-filter-bar'
 import { DashboardMetricCard } from '@/views/components/dashboard/dashboard-metric-card'
@@ -50,46 +51,83 @@ export default function Dashboard() {
 
   const [chartKey, setChartKey] = useState(0)
 
+  // Carrega a listagem de veículos do filtro no topo
   useEffect(() => {
     getVeiculos().then((veiculos: VeiculoFiltroDTO[]) => {
       setVehicleOptions([
         { value: 'all', label: 'Todos os veículos' },
         ...veiculos.map((v) => ({ value: String(v.id), label: v.nome })),
       ])
-    })
+    }).catch(err => console.error("Erro ao carregar veículos do filtro:", err))
   }, [])
 
+  // Carrega as métricas e dados dos gráficos
   useEffect(() => {
     setLoading(true)
 
     const veiculoId = filters.vehicle === 'all' ? undefined : Number(filters.vehicle)
     const { dateFrom, dateTo } = filters
 
-    Promise.all([
+    // ADICIONADO: Fallbacks automáticos de data exigidos pelo RequestParam do DashboardController
+    const hoje = new Date()
+    const trintaDiasAtras = new Date()
+    trintaDiasAtras.setDate(hoje.getDate() - 30)
+    const fmt = (d: Date) => d.toISOString().slice(0, 10)
+
+    const dataInicio = dateFrom || fmt(trintaDiasAtras)
+    const dataFim = dateTo || fmt(hoje)
+
+    // ADICIONADO: Busca os dados dinâmicos do seu novo Controller especificamente para os 3 cards
+    getIndicadores({ dataInicio, dataFim })
+      .then((indicadores: any) => {
+        setResumo({
+          custoMedioPorKm: indicadores.custoMedioPorKm || 0,
+          kmTotal: indicadores.kmTotal || 0,
+          viagensRealizadas: indicadores.viagensRealizadas || 0,
+        })
+      })
+      .catch((err) => console.error("Erro ao carregar os indicadores do topo:", err))
+
+    // Proteção usando allSettled para evitar que um erro 500 derrube os dados corretos
+    Promise.allSettled([
       getResumo({ veiculoId, dataInicio: dateFrom || undefined, dataFim: dateTo || undefined }),
       getConsumo(veiculoId),
       getQuilometragem(veiculoId),
       getStatus(veiculoId),
-    ]).then(([resumoData, consumoData, kmData, statusData]: [
-      ResumoPainelDTO,
-      ConsumoMensalDTO[],
-      QuilometragemDTO[],
-      StatusFrotaDTO,
-    ]) => {
-      setResumo(resumoData)
-      setConsumo({
-        labels: consumoData.map((c) => c.mes),
-        data: consumoData.map((c) => c.valorConsumo),
-      })
-      setPostos({ labels: [], data: [] }) // endpoint não existe no backend
-      setKm({
-        labels: kmData.map((k) => k.mes),
-        empresa: kmData.map((k) => k.kmEmpresa),
-        terceirizado: kmData.map((k) => k.kmTerceirizados),
-      })
-      setStatus(statusData)
+    ]).then(([resumoRes, consumoRes, kmRes, statusRes]) => {
+      
+      // 1. Popula dados de Resumo Geral (Mantido caso a rota legada responda)
+      if (resumoRes.status === 'fulfilled') {
+        setResumo(resumoRes.value)
+      }
+
+      // 2. Popula dados de Evolução de Consumo
+      if (consumoRes.status === 'fulfilled') {
+        const consumoData: ConsumoMensalDTO[] = consumoRes.value
+        setConsumo({
+          labels: consumoData.map((c) => c.mes),
+          data: consumoData.map((c) => c.valorConsumo),
+        })
+      }
+
+      // 3. Popula dados de Quilometragem (Seu endpoint que já está OK!)
+      if (kmRes.status === 'fulfilled') {
+        const kmData: QuilometragemDTO[] = kmRes.value
+        setKm({
+          labels: kmData.map((k) => k.mes),
+          empresa: kmData.map((k) => k.kmEmpresa),
+          terceirizado: kmData.map((k) => k.kmTerceirizados),
+        })
+      }
+
+      // 4. Popula dados de Status dos Veículos
+      if (statusRes.status === 'fulfilled') {
+        setStatus(statusRes.value)
+      }
+
+      setPostos({ labels: [], data: [] }) // endpoint não existente no backend por enquanto
       setLoading(false)
-      setChartKey((k) => k + 1)
+      setChartKey((k) => k + 1) // Atualiza o ID do gráfico para re-renderizar com segurança
     })
   }, [filters.vehicle, filters.period, filters.dateFrom, filters.dateTo])
 
@@ -126,23 +164,16 @@ export default function Dashboard() {
     }
   }
 
-  // FUNÇÃO DE DOWNLOAD DE RELATÓRIO PDF
+  // Download do PDF
   const handleGenerateReport = async () => {
     try {
       const blob = await getRelatorios()
-
-      // Converte a resposta binária em uma URL utilizável pelo navegador
       const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
       const link = document.createElement('a')
       link.href = url
-      
-      // Define o nome do arquivo baixado
       link.setAttribute('download', `certidao_${new Date().toISOString().slice(0, 10)}.pdf`)
-      
       document.body.appendChild(link)
       link.click()
-      
-      // Remove o elemento da tela e limpa a memória cache do blob
       link.parentNode?.removeChild(link)
       window.URL.revokeObjectURL(url)
     } catch (error) {
@@ -167,7 +198,7 @@ export default function Dashboard() {
             onPeriodChange={handlePeriodChange}
             onVehicleChange={(value) => setFilters((c) => ({ ...c, vehicle: value }))}
             onDateChange={handleDateChange}
-            onGenerateReport={handleGenerateReport} // Vinculado à função de download
+            onGenerateReport={handleGenerateReport}
           />
         </header>
 
@@ -284,7 +315,7 @@ export default function Dashboard() {
               </div>
               <div className="mt-3 space-y-1">
                 <p className="text-sm font-medium text-slate-700">
-                  {status.operando > 0
+                  {status.operando > 0 || status.manutencao > 0 || status.parados > 0
                     ? `Frota operando com ${Math.round(status.percentualDisponibilidade)}% de disponibilidade`
                     : 'Sem dados de frota'}
                 </p>
