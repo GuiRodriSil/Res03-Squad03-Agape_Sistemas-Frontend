@@ -30,7 +30,7 @@ export function DashboardFilterBar({
   onGenerateReport,
 }: DashboardFilterBarProps) {
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end overflow-visible min-w-0">
       <Button
         size="lg"
         className="h-9 rounded-xl bg-[#1e293b] px-4 text-xs font-medium text-white hover:bg-[#1e293b]/95"
@@ -42,13 +42,13 @@ export function DashboardFilterBar({
       <Select value={filters.period} onValueChange={onPeriodChange}>
         <SelectTrigger
           size="default"
-          className="h-9 min-w-[148px] rounded-lg border-gray-200 bg-white text-xs text-slate-500"
+          className="h-9 min-w-[148px] max-w-[148px] rounded-lg border-gray-200 bg-white text-xs text-slate-500 overflow-hidden text-ellipsis"
         >
           <SelectValue placeholder="Selecione o periodo" />
         </SelectTrigger>
-        <SelectContent>
-          {periods.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
+        <SelectContent position="popper">
+          {periods.map((item, index) => (
+            <SelectItem key={`${item.value}-${index}`} value={item.value}>
               {item.label}
             </SelectItem>
           ))}
@@ -58,13 +58,13 @@ export function DashboardFilterBar({
       <Select value={filters.vehicle} onValueChange={onVehicleChange}>
         <SelectTrigger
           size="default"
-          className="h-9 min-w-[170px] rounded-lg border-gray-200 bg-white text-xs text-slate-500"
+          className="h-9 min-w-[170px] max-w-[170px] rounded-lg border-gray-200 bg-white text-xs text-slate-500 overflow-hidden text-ellipsis"
         >
           <SelectValue placeholder="Selecione o veiculo" />
         </SelectTrigger>
-        <SelectContent>
-          {vehicles.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
+        <SelectContent position="popper">
+          {vehicles.map((item, index) => (
+            <SelectItem key={`${item.value}-${index}`} value={item.value}>
               {item.label}
             </SelectItem>
           ))}

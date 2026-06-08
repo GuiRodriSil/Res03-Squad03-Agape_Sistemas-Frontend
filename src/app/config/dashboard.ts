@@ -53,25 +53,19 @@ export type DashboardMetric = {
 }
 
 export const initialDashboardFilters: DashboardFiltersState = {
-  period: "30d",
-  vehicle: "all",
+  period: "",
+  vehicle: "",
   dateFrom: "2026-03-01",
   dateTo: "2026-03-30",
 }
 
 export const periodOptions: DashboardOption[] = [
-  { value: "all", label: "Selecione o periodo" },
   { value: "30d", label: "Ultimos 30 dias" },
   { value: "60d", label: "Ultimos 60 dias" },
   { value: "90d", label: "Ultimos 90 dias" },
 ]
 
-export const vehicleOptions: DashboardOption[] = [
-  { value: "all", label: "Selecione o veiculo" },
-  { value: "v1", label: "Truck 01" },
-  { value: "v2", label: "Truck 02" },
-  { value: "v3", label: "Truck 03" },
-]
+export const vehicleOptions: DashboardOption[] = []
 
 export const dashboardMetrics: DashboardMetric[] = [
   { label: "Custo medio por KM", value: "R$ 0,00" },

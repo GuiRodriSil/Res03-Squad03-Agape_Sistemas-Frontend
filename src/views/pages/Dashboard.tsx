@@ -11,6 +11,7 @@ import {
   stackedBarOptions,
   verticalBarOptions,
   type DashboardFiltersState,
+  type DashboardOption,
 } from '@/app/config/dashboard'
 import {
   getConsumo,
@@ -40,7 +41,7 @@ const palette = {
 export default function Dashboard() {
   const [filters, setFilters] = useState<DashboardFiltersState>(initialDashboardFilters)
 
-  const [vehicleOptions, setVehicleOptions] = useState([{ value: 'all', label: 'Todos os veículos' }])
+  const [vehicleOptions, setVehicleOptions] = useState<DashboardOption[]>([])
 
   const [resumo, setResumo] = useState<ResumoPainelDTO>({ custoMedioPorKm: 0, kmTotal: 0, viagensRealizadas: 0 })
   const [consumo, setConsumo] = useState<{ labels: string[]; data: number[] }>({ labels: [], data: [] })
@@ -54,10 +55,13 @@ export default function Dashboard() {
   // Carrega a listagem de veículos do filtro no topo
   useEffect(() => {
     getVeiculos().then((veiculos: VeiculoFiltroDTO[]) => {
-      setVehicleOptions([
-        { value: 'all', label: 'Todos os veículos' },
-        ...veiculos.map((v) => ({ value: String(v.id), label: v.nome })),
-      ])
+      const uniqueVehicles = Array.from(
+        new Map(veiculos.map((veiculo) => [veiculo.id, veiculo])).values()
+      ).sort((a, b) => a.id - b.id)
+
+      setVehicleOptions(
+        uniqueVehicles.map((v) => ({ value: String(v.id), label: v.nome }))
+      )
     }).catch(err => console.error("Erro ao carregar veículos do filtro:", err))
   }, [])
 
@@ -65,7 +69,7 @@ export default function Dashboard() {
   useEffect(() => {
     setLoading(true)
 
-    const veiculoId = filters.vehicle === 'all' ? undefined : Number(filters.vehicle)
+    const veiculoId = filters.vehicle !== '' ? Number(filters.vehicle) : undefined
     const { dateFrom, dateTo } = filters
 
     // ADICIONADO: Fallbacks automáticos de data exigidos pelo RequestParam do DashboardController
