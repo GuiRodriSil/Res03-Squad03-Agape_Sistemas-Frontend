@@ -16,7 +16,6 @@ import {
 import {
   getConsumo,
   getQuilometragem,
-  getResumo,
   getStatus,
   getVeiculos,
   getRelatorios,
@@ -28,8 +27,6 @@ import { DashboardMetricCard } from '@/views/components/dashboard/dashboard-metr
 import { DashboardShellCard } from '@/views/components/dashboard/dashboard-shell-card'
 
 interface VeiculoFiltroDTO { id: number; nome: string }
-interface ConsumoMensalDTO { mes: string; valorConsumo: number }
-interface QuilometragemDTO { mes: string; kmEmpresa: number; kmTerceirizados: number }
 interface StatusFrotaDTO { operando: number; manutencao: number; parados: number; percentualDisponibilidade: number }
 interface ResumoPainelDTO { custoMedioPorKm: number; kmTotal: number; viagensRealizadas: number }
 
@@ -148,8 +145,6 @@ export default function Dashboard() {
   const metrics = [
     {
       label: staticMetrics[0].label,
-      // O "?." garante que se 'resumo' for null, ele para e retorna undefined
-      // O "|| 0" garante que se o valor for null/undefined, ele usa 0
       value: loading || !resumo ? '...' : `R$ ${ (resumo.custoMedioPorKm || 0).toFixed(2).replace('.', ',') }`,
     },
     {
