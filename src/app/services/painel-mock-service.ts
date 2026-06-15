@@ -70,14 +70,16 @@ export async function getPostos(
   return buildPostos(toVeiculoId(veiculoId), resolvePeriod(period, dataInicio, dataFim))
 }
 
-export async function getQuilometragem(
-  veiculoId?: number,
-  period?: string,
-  dataInicio?: string,
-  dataFim?: string,
-): Promise<KmMensal[]> {
+export async function getQuilometragem(params: {
+  veiculoId?: number;
+  period?: string;
+  dataInicio?: string;
+  dataFim?: string;
+}): Promise<KmMensal[]> {
   await delay()
-  return buildKmMensal(toVeiculoId(veiculoId), resolvePeriod(period, dataInicio, dataFim))
+  const vid = params?.veiculoId == null ? 'all' : params.veiculoId
+  const period = resolvePeriod(params?.period, params?.dataInicio, params?.dataFim)
+  return buildKmMensal(vid, period)
 }
 
 export async function getStatus(_veiculoId?: number): Promise<StatusFrota> {

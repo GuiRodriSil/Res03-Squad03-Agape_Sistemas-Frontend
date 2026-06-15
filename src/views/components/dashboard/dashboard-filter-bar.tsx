@@ -62,9 +62,9 @@ export function DashboardFilterBar({
         >
           <SelectValue placeholder="Selecione o veiculo" />
         </SelectTrigger>
-        <SelectContent position="popper">
-          {vehicles.map((item, index) => (
-            <SelectItem key={`${item.value}-${index}`} value={item.value}>
+        <SelectContent>
+          {vehicles.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
               {item.label}
             </SelectItem>
           ))}

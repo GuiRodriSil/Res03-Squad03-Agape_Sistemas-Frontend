@@ -21,6 +21,7 @@ import {
   getVeiculos,
   getRelatorios,
   getIndicadores,
+  getPostos,
 } from '@/app/services/painel-service'
 import { DashboardFilterBar } from '@/views/components/dashboard/dashboard-filter-bar'
 import { DashboardMetricCard } from '@/views/components/dashboard/dashboard-metric-card'
@@ -52,27 +53,25 @@ export default function Dashboard() {
 
   const [chartKey, setChartKey] = useState(0)
 
-  // Carrega a listagem de veículos do filtro no topo
   useEffect(() => {
     getVeiculos().then((veiculos: VeiculoFiltroDTO[]) => {
-      const uniqueVehicles = Array.from(
-        new Map(veiculos.map((veiculo) => [veiculo.id, veiculo])).values()
-      ).sort((a, b) => a.id - b.id)
+      const veiculosUnicos = Array.from(
+        new Map(veiculos.map((v) => [v.id, v])).values()
+      );
 
-      setVehicleOptions(
-        uniqueVehicles.map((v) => ({ value: String(v.id), label: v.nome }))
-      )
+      setVehicleOptions([
+        { value: 'all', label: 'Todos os veículos' },
+        ...veiculosUnicos.map((v) => ({ value: String(v.id), label: v.nome })),
+      ]);
     }).catch(err => console.error("Erro ao carregar veículos do filtro:", err))
   }, [])
 
-  // Carrega as métricas e dados dos gráficos
-  useEffect(() => {
+    useEffect(() => {
     setLoading(true)
 
-    const veiculoId = filters.vehicle !== '' ? Number(filters.vehicle) : undefined
+    const veiculoId = filters.vehicle !== '' && filters.vehicle !== 'all' ? Number(filters.vehicle) : undefined
     const { dateFrom, dateTo } = filters
 
-    // ADICIONADO: Fallbacks automáticos de data exigidos pelo RequestParam do DashboardController
     const hoje = new Date()
     const trintaDiasAtras = new Date()
     trintaDiasAtras.setDate(hoje.getDate() - 30)
@@ -81,74 +80,87 @@ export default function Dashboard() {
     const dataInicio = dateFrom || fmt(trintaDiasAtras)
     const dataFim = dateTo || fmt(hoje)
 
-    // ADICIONADO: Busca os dados dinâmicos do seu novo Controller especificamente para os 3 cards
-    getIndicadores({ dataInicio, dataFim })
-      .then((indicadores: any) => {
-        setResumo({
-          custoMedioPorKm: indicadores.custoMedioPorKm || 0,
-          kmTotal: indicadores.kmTotal || 0,
-          viagensRealizadas: indicadores.viagensRealizadas || 0,
-        })
-      })
-      .catch((err) => console.error("Erro ao carregar os indicadores do topo:", err))
-
-    // Proteção usando allSettled para evitar que um erro 500 derrube os dados corretos
+    // Buscamos TUDO em paralelo
     Promise.allSettled([
-      getResumo({ veiculoId, dataInicio: dateFrom || undefined, dataFim: dateTo || undefined }),
-      getConsumo(veiculoId),
-      getQuilometragem(veiculoId),
-      getStatus(veiculoId),
-    ]).then(([resumoRes, consumoRes, kmRes, statusRes]) => {
+      getIndicadores({ dataInicio, dataFim, veiculoId }),
+      getConsumo({ dataInicio, dataFim, veiculoId }),
+      getQuilometragem({ dataInicio, dataFim, veiculoId }),
+      getStatus({ dataInicio, dataFim, veiculoId }),
+      getPostos({ dataInicio, dataFim, veiculoId }) 
+    ]).then(([indRes, consRes, kmRes, statRes, postosRes]) => {
       
-      // 1. Popula dados de Resumo Geral (Mantido caso a rota legada responda)
-      if (resumoRes.status === 'fulfilled') {
-        setResumo(resumoRes.value)
+      // 1. Indicadores (Cards de cima)
+      if (indRes.status === 'fulfilled') {
+        console.log("DADOS QUE VIERAM DA API:", indRes.value);
+        setResumo({
+          custoMedioPorKm: indRes.value.custoMedioKm || 0, 
+          kmTotal: indRes.value.kmTotal || 0,
+          viagensRealizadas: indRes.value.totalViagens || 0, 
+        });
+      } else {
+        console.error("Erro na rota Indicadores (Cards):", indRes.reason);
       }
 
-      // 2. Popula dados de Evolução de Consumo
-      if (consumoRes.status === 'fulfilled') {
-        const consumoData: ConsumoMensalDTO[] = consumoRes.value
+      // 2. Gráfico de Consumo
+      if (consRes.status === 'fulfilled') {
         setConsumo({
-          labels: consumoData.map((c) => c.mes),
-          data: consumoData.map((c) => c.valorConsumo),
-        })
+          labels: consRes.value.map((c: any) => c.mes),
+          data: consRes.value.map((c: any) => c.valorConsumo),
+        });
+      } else {
+        console.error("Erro na rota Consumo:", consRes.reason);
       }
 
-      // 3. Popula dados de Quilometragem (Seu endpoint que já está OK!)
+      // 3. Gráfico de Quilometragem
       if (kmRes.status === 'fulfilled') {
-        const kmData: QuilometragemDTO[] = kmRes.value
         setKm({
-          labels: kmData.map((k) => k.mes),
-          empresa: kmData.map((k) => k.kmEmpresa),
-          terceirizado: kmData.map((k) => k.kmTerceirizados),
-        })
+          labels: kmRes.value.map((k: any) => k.mes),
+          empresa: kmRes.value.map((k: any) => k.kmEmpresa),
+          terceirizado: kmRes.value.map((k: any) => k.kmTerceirizados),
+        });
+      } else {
+        console.error("Erro na rota Quilometragem:", kmRes.reason);
       }
 
-      // 4. Popula dados de Status dos Veículos
-      if (statusRes.status === 'fulfilled') {
-        setStatus(statusRes.value)
+      // 4. Gráfico de Pizza (Status)
+      if (statRes.status === 'fulfilled') {
+        setStatus(statRes.value);
+      } else {
+        console.error("Erro na rota Status:", statRes.reason);
       }
 
-      setPostos({ labels: [], data: [] }) // endpoint não existente no backend por enquanto
-      setLoading(false)
-      setChartKey((k) => k + 1) // Atualiza o ID do gráfico para re-renderizar com segurança
-    })
+      // 5. Gráfico de Postos
+      if (postosRes.status === 'fulfilled') {
+        setPostos({
+          labels: postosRes.value.map((p: any) => p.nomePosto), 
+          data: postosRes.value.map((p: any) => p.precoMedio),  
+        });
+      } else {
+        console.error("Erro na rota Postos:", postosRes.reason);
+      }
+
+      setLoading(false);
+      setChartKey((k) => k + 1);
+    });
+
   }, [filters.vehicle, filters.period, filters.dateFrom, filters.dateTo])
-
+  
   const metrics = [
     {
       label: staticMetrics[0].label,
-      value: loading ? '...' : `R$ ${resumo.custoMedioPorKm.toFixed(2).replace('.', ',')}`,
+      // O "?." garante que se 'resumo' for null, ele para e retorna undefined
+      // O "|| 0" garante que se o valor for null/undefined, ele usa 0
+      value: loading || !resumo ? '...' : `R$ ${ (resumo.custoMedioPorKm || 0).toFixed(2).replace('.', ',') }`,
     },
     {
       label: staticMetrics[1].label,
-      value: loading ? '...' : `${resumo.kmTotal.toLocaleString('pt-BR')} KM`,
+      value: loading || !resumo ? '...' : `${(resumo.kmTotal || 0).toLocaleString('pt-BR')} KM`,
     },
     {
       label: staticMetrics[2].label,
-      value: loading ? '...' : String(resumo.viagensRealizadas),
+      value: loading || !resumo ? '...' : String(resumo.viagensRealizadas || 0),
     },
-  ]
+];
 
   const handleDateChange = (field: 'dateFrom' | 'dateTo', value: string) => {
     setFilters((current) => ({ ...current, [field]: value }))
@@ -168,23 +180,38 @@ export default function Dashboard() {
     }
   }
 
-  // Download do PDF
-  const handleGenerateReport = async () => {
-    try {
-      const blob = await getRelatorios()
-      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `certidao_${new Date().toISOString().slice(0, 10)}.pdf`)
-      document.body.appendChild(link)
-      link.click()
-      link.parentNode?.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Erro ao baixar relatório:', error)
-      window.alert('Ocorreu um erro ao gerar a certidão PDF.')
-    }
+  // Download do PDF Corrigido passando os filtros ativos
+const handleGenerateReport = async () => {
+  try {
+    // 1. Captura os mesmos filtros que os gráficos utilizam
+    const veiculoId = filters.vehicle !== '' && filters.vehicle !== 'all' ? Number(filters.vehicle) : undefined
+    const { dateFrom, dateTo } = filters
+
+    const hoje = new Date()
+    const trintaDiasAtras = new Date()
+    trintaDiasAtras.setDate(hoje.getDate() - 30)
+    const fmt = (d: Date) => d.toISOString().slice(0, 10)
+
+    const dataInicio = dateFrom || fmt(trintaDiasAtras)
+    const dataFim = dateTo || fmt(hoje)
+
+    // 2. Passa o objeto com os filtros para a rota do relatório
+    const blob = await getRelatorios({ dataInicio, dataFim, veiculoId })
+    
+    // 3. Faz o download do arquivo com o nome correto
+    const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `relatorio_frota_${dataInicio}_a_${dataFim}.pdf`)
+    document.body.appendChild(link)
+    link.click()
+    link.parentNode?.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Erro ao baixar relatório:', error)
+    window.alert('Ocorreu um erro ao gerar o relatório do dashboard.')
   }
+}
 
   return (
     <div className="min-h-screen bg-white">
@@ -207,10 +234,10 @@ export default function Dashboard() {
         </header>
 
         <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {metrics.map((metric) => (
-            <DashboardMetricCard key={metric.label} metric={metric} />
-          ))}
-        </section>
+        {metrics.map((metric, index) => (
+          <DashboardMetricCard key={`metric-${index}-${metric.label}`} metric={metric} />
+        ))}
+      </section>
 
         <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <DashboardShellCard
